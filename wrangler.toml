@@ -1,0 +1,21 @@
+name = "finance-tracker"
+main = "src/index.ts"
+compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist/client"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+CURRENCY = "INR"
+LOCALE = "en-IN"
+# APP_PASSWORD and SESSION_SECRET are secrets, not vars.
+# Local dev reads them from .dev.vars; production uses `wrangler secret put`.
