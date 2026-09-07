@@ -105,7 +105,36 @@ stale or missing build is the most common way to ship a blank page.
 You'll get a URL like `https://finance-tracker.<subdomain>.workers.dev`. Open
 it, enter `APP_PASSWORD`, and you're in.
 
-## 6. Custom domain (optional)
+## 6. Automatic deploys on merge to main
+
+`.github/workflows/deploy.yml` deploys on every push to `main` — and merging a
+pull request is a push to `main`, so a merge is all it takes. It typechecks,
+builds, applies any pending D1 migrations `--remote`, then `wrangler deploy`s.
+Deploys are serialised, so two merges landing together queue rather than race.
+
+It needs two repository secrets (**Settings → Secrets and variables → Actions →
+New repository secret**):
+
+| Secret | Value |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | An API token with **Workers Scripts:Edit**, **D1:Edit** and **Account Settings:Read** |
+| `CLOUDFLARE_ACCOUNT_ID` | From the Cloudflare dashboard sidebar, or `npx wrangler whoami` |
+
+Create the token at **My Profile → API Tokens → Create Token**. The "Edit
+Cloudflare Workers" template covers Workers and needs D1:Edit added.
+
+`APP_PASSWORD` and `SESSION_SECRET` are *not* needed here. They live on the
+Worker itself (step 4) and survive deploys — the workflow never touches them. If
+you ever change them, use `wrangler secret put` again rather than adding them to
+GitHub.
+
+Steps 1–5 still have to be done once by hand: the workflow can't create the D1
+database, fill in `database_id`, or set the Worker's secrets for you. Once
+`main` carries a real `database_id` and the secrets exist, every merge ships on
+its own. Watch a run under the repo's **Actions** tab; a red run means nothing
+was deployed, and `main` keeps serving the previous version.
+
+## 7. Custom domain (optional)
 
 In the dashboard: **Workers & Pages → finance-tracker → Settings → Domains &
 Routes → Add custom domain**. The domain must be on a zone in the same account;
@@ -117,7 +146,7 @@ pattern = "money.example.com"
 custom_domain = true
 ```
 
-## 7. Add it to your phone's home screen
+## 8. Add it to your phone's home screen
 
 Mobile is the primary entry surface. Open the URL in Safari or Chrome and use
 **Share → Add to Home Screen**. It launches full-screen and the quick-add button
