@@ -129,6 +129,15 @@ page.
 **Categories** — eleven built-ins that can't be deleted, plus your own in
 Settings.
 
+## Deploying
+
+One Worker serves the API and the built app, with D1 attached; see
+[DEPLOY.md](./DEPLOY.md). After a one-time setup (create the D1 database, fill
+in its id, set the two secrets), **every merge to `main` deploys itself** via
+`.github/workflows/deploy.yml` — typecheck, build, apply pending migrations,
+deploy. Pull requests get the same typecheck and build as a check before they
+can be merged.
+
 ## Bank statement reconciliation
 
 Upload a CSV export for an account, and the app matches its rows against what
