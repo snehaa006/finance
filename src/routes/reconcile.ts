@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { ApiError, bad, notFound, reqInt } from "../lib/http";
-import { parseStatementCsv } from "../lib/csv";
+import { parseStatementCsv, parseStatementTable } from "../lib/csv";
+import { isSpreadsheet, spreadsheetToTable } from "../lib/spreadsheet";
 import { matchRows, type Candidate, type Row } from "../lib/match";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -72,12 +73,14 @@ function shiftDate(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** POST /api/reconcile/imports — upload and parse a CSV statement. */
+/** POST /api/reconcile/imports — upload and parse a CSV or Excel statement. */
 app.post("/imports", async (c) => {
   const form = await c.req.formData();
-  const file = form.get("file") as unknown as { name?: string; text(): Promise<string> } | null;
+  const file = form.get("file") as unknown as
+    | { name?: string; arrayBuffer(): Promise<ArrayBuffer> }
+    | null;
   const accountId = Number(form.get("account_id"));
-  if (!file || typeof file.text !== "function") bad("A CSV file is required");
+  if (!file || typeof file.arrayBuffer !== "function") bad("A statement file is required");
   if (!Number.isInteger(accountId)) bad("account_id is required");
 
   const account = await c.env.DB.prepare(`SELECT id, type FROM accounts WHERE id = ?`)
@@ -89,11 +92,17 @@ app.post("/imports", async (c) => {
   if (/\.pdf$/i.test(name)) {
     throw new ApiError(
       415,
-      "PDF statements aren't supported yet — export your statement as CSV and upload that.",
+      "PDF statements aren't supported yet — download the Excel or CSV version instead.",
     );
   }
 
-  const rows = parseStatementCsv(await file.text());
+  // Sniff the bytes rather than trusting the extension: banks label plain CSV
+  // as .xls often enough that the name is not evidence of anything.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.byteLength === 0) bad("That file is empty");
+  const rows = isSpreadsheet(bytes)
+    ? parseStatementTable(spreadsheetToTable(bytes))
+    : parseStatementCsv(new TextDecoder().decode(bytes));
 
   const imp = await c.env.DB.prepare(
     `INSERT INTO statement_imports (account_id, filename, row_count) VALUES (?, ?, ?) RETURNING id`,

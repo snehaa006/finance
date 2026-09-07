@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { useAppData } from "@/lib/store";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { StatementImport } from "@/lib/types";
 
 export function Reconcile() {
@@ -24,7 +25,11 @@ export function Reconcile() {
   const [imports, setImports] = React.useState<StatementImport[] | null>(null);
   const [accountId, setAccountId] = React.useState<string>("");
   const [uploading, setUploading] = React.useState(false);
+  const [dragging, setDragging] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  // Nested elements fire dragleave as the pointer crosses them, so count
+  // enter/leave pairs instead of treating any leave as "the file left".
+  const dragDepth = React.useRef(0);
 
   const bankAccounts = accounts.filter((a) => !a.archived);
 
@@ -72,8 +77,9 @@ export function Reconcile() {
         <CardHeader>
           <CardTitle className="text-base">Upload a statement</CardTitle>
           <CardDescription>
-            CSV only for now. An ICICI internet-banking export works as downloaded — the
-            columns are detected automatically, extra header lines and all.
+            An ICICI internet-banking download works as-is — Excel (.xls/.xlsx) or CSV,
+            no editing needed. The columns are detected automatically, account summary
+            rows at the top and all.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -96,22 +102,66 @@ export function Reconcile() {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="sr-only"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) upload(f);
             }}
           />
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={uploading || !accountId}
-            onClick={() => fileRef.current?.click()}
+
+          {/* A button as well as the drop zone: dropping is impossible on a
+              phone, which is where this app is mostly used. */}
+          <div
+            onDragEnter={(e) => {
+              e.preventDefault();
+              dragDepth.current += 1;
+              setDragging(true);
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              dragDepth.current -= 1;
+              if (dragDepth.current <= 0) setDragging(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              dragDepth.current = 0;
+              setDragging(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) upload(f);
+            }}
+            className={cn(
+              "rounded-xl border-2 border-dashed p-6 text-center transition-colors",
+              dragging ? "border-primary bg-primary/5" : "border-input bg-muted/40",
+              uploading && "opacity-60",
+            )}
           >
-            <Upload />
-            {uploading ? "Importing…" : "Choose CSV file"}
-          </Button>
+            <FileUp
+              className={cn(
+                "mx-auto mb-2 h-7 w-7",
+                dragging ? "text-primary" : "text-muted-foreground",
+              )}
+            />
+            <p className="text-sm font-medium">
+              {dragging ? "Drop it here" : "Drag your statement here"}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              .xls, .xlsx or .csv — straight from your bank, no editing needed
+            </p>
+            <Button
+              variant="outline"
+              className="mt-3"
+              disabled={uploading || !accountId}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload />
+              {uploading ? "Importing…" : "Choose a file"}
+            </Button>
+            {!accountId && (
+              <p className="mt-2 text-xs text-muted-foreground">Pick an account first.</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
