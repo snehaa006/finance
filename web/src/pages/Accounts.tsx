@@ -24,10 +24,9 @@ const ACCOUNT_KINDS: { value: AccountType; label: string; icon: typeof Landmark 
   { value: "cash", label: "Cash in hand", icon: Banknote },
 ];
 
-/** One tap for the accounts almost every entry here will use. */
+/** One tap for the two accounts almost every entry here will use. */
 const NAME_SUGGESTIONS: { name: string; type: AccountType }[] = [
   { name: "ICICI Bank", type: "bank" },
-  { name: "ICICI Savings", type: "bank" },
   { name: "Cash in hand", type: "cash" },
 ];
 
