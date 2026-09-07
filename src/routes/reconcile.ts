@@ -161,11 +161,12 @@ app.get("/imports/:id", async (c) => {
   const dates = rows.map((r) => r.date).sort();
   const lo = dates[0] ?? "9999-12-31";
   const hi = dates[dates.length - 1] ?? "0000-01-01";
-  const matchedIds = rows.map((r) => r.matched_transaction_id).filter((x): x is number => !!x);
 
   // Bucket 3: entries the user logged for this account inside the statement's
   // date span that no statement row claimed — a possible duplicate or typo.
-  const placeholders = matchedIds.length ? matchedIds.map(() => "?").join(",") : "NULL";
+  // The matched ids are excluded with a subquery rather than one bound
+  // parameter each: D1 allows 100 variables per statement, and a real
+  // statement runs to hundreds of rows.
   const { results: unmatchedInApp } = await c.env.DB.prepare(
     `SELECT t.id, t.date, t.amount, t.note, t.type, t.reconciliation_status,
             c.name AS category_name
@@ -173,10 +174,13 @@ app.get("/imports/:id", async (c) => {
        LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.account_id = ? AND t.date >= ? AND t.date <= ?
         AND t.reconciliation_status != 'ignored'
-        AND t.id NOT IN (${placeholders})
+        AND t.id NOT IN (
+          SELECT matched_transaction_id FROM statement_rows
+           WHERE import_id = ? AND matched_transaction_id IS NOT NULL
+        )
       ORDER BY t.date, t.id`,
   )
-    .bind(imp.account_id, lo, hi, ...matchedIds)
+    .bind(imp.account_id, lo, hi, id)
     .all();
 
   return c.json({
@@ -199,6 +203,57 @@ app.delete("/imports/:id", async (c) => {
     .run();
   if (!res.meta.changes) notFound("Import");
   return c.json({ ok: true });
+});
+
+/**
+ * Turn every unlogged row of an import into a transaction in one go.
+ *
+ * Reviewing a first import row by row is not realistic — a year of statement
+ * is hundreds of rows, and the bank's copy is the authority anyway. Entries
+ * land uncategorised with the statement's own description as the note; they
+ * are ordinary transactions afterwards, so they can be edited or deleted like
+ * anything else.
+ */
+app.post("/imports/:id/create-missing", async (c) => {
+  const importId = Number(c.req.param("id"));
+  const imp = await c.env.DB.prepare(`SELECT id, account_id FROM statement_imports WHERE id = ?`)
+    .bind(importId)
+    .first<{ account_id: number }>();
+  if (!imp) notFound("Import");
+
+  const { results: rows } = await c.env.DB.prepare(
+    `SELECT id, date, description, amount FROM statement_rows
+      WHERE import_id = ? AND match_status = 'unmatched' ORDER BY date, id`,
+  )
+    .bind(importId)
+    .all<{ id: number; date: string; description: string; amount: number }>();
+  if (rows.length === 0) return c.json({ ok: true, created: 0 });
+
+  // Chunked: D1 caps statements per batch, and a year of statement is
+  // hundreds of rows.
+  let created = 0;
+  for (let i = 0; i < rows.length; i += 25) {
+    const chunk = rows.slice(i, i + 25);
+    const inserted = await c.env.DB.batch<{ id: number }>(
+      chunk.map((r) =>
+        c.env.DB.prepare(
+          `INSERT INTO transactions
+             (account_id, category_id, amount, type, date, note, source, reconciliation_status)
+           VALUES (?, NULL, ?, ?, ?, ?, 'statement_import', 'matched') RETURNING id`,
+        ).bind(imp.account_id, r.amount, r.amount > 0 ? "income" : "expense", r.date, r.description),
+      ),
+    );
+    await c.env.DB.batch(
+      chunk.map((r, j) =>
+        c.env.DB.prepare(
+          `UPDATE statement_rows SET match_status = 'matched', matched_transaction_id = ?,
+                  match_confidence = 1 WHERE id = ?`,
+        ).bind(inserted[j].results[0].id, r.id),
+      ),
+    );
+    created += chunk.length;
+  }
+  return c.json({ ok: true, created });
 });
 
 /** Turn a statement row the user never logged into a real transaction. */
