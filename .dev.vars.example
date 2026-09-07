@@ -1,0 +1,2 @@
+APP_PASSWORD=changeme
+SESSION_SECRET=dev-only-secret-change-me-to-something-long-and-random
