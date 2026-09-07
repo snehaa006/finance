@@ -145,7 +145,14 @@ function findHeaderRow(table: string[][]): number {
 }
 
 export function parseStatementCsv(text: string): ParsedRow[] {
-  const table = parseCsv(text.replace(/^﻿/, ""));
+  return parseStatementTable(parseCsv(text.replace(/^﻿/, "")));
+}
+
+/**
+ * Turn a sheet of cells into transactions. Shared by the CSV and spreadsheet
+ * paths: by this point an `.xls` looks exactly like a parsed CSV.
+ */
+export function parseStatementTable(table: string[][]): ParsedRow[] {
   if (table.length < 2) bad("Statement needs a header row and at least one transaction");
 
   const headerRow = findHeaderRow(table);
