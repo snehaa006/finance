@@ -1,6 +1,15 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckCircle2, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  EyeOff,
+  ListPlus,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,6 +122,29 @@ export function ReconcileDetail() {
               <CardDescription>
                 You never logged these. Create the entry, or dismiss the row.
               </CardDescription>
+              {/* Reviewing a first import one row at a time isn't realistic —
+                  a year of statement is hundreds of rows. */}
+              {missing_in_app.length > 1 && (
+                <Button
+                  className="mt-3 w-full sm:w-auto"
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      !confirm(
+                        `Add all ${missing_in_app.length} of these to your history?\n\nThey'll be uncategorised, with the bank's description as the note. You can edit or delete any of them afterwards.`,
+                      )
+                    )
+                      return;
+                    act(
+                      () => api.post(`/reconcile/imports/${id}/create-missing`),
+                      `Added ${missing_in_app.length} entries`,
+                    );
+                  }}
+                >
+                  <ListPlus />
+                  {busy ? "Adding…" : `Add all ${missing_in_app.length} to my history`}
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               {missing_in_app.length === 0 ? (
