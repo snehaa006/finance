@@ -1,5 +1,12 @@
 import * as React from "react";
-import { Trash2 } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Banknote,
+  Landmark,
+  Trash2,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,15 +21,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { useAppData } from "@/lib/store";
-import { toMajorString, toMinor, today } from "@/lib/format";
+import { formatMoney, toMajorString, toMinor, today } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Transaction, TxType } from "@/lib/types";
-
-const TYPES: { value: TxType; label: string }[] = [
-  { value: "expense", label: "Expense" },
-  { value: "income", label: "Income" },
-  { value: "transfer", label: "Transfer" },
-];
+import type { Account, Transaction, TxType } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -33,12 +34,20 @@ interface Props {
 }
 
 /**
- * One sheet serves both "quick add" and "edit". The quick-add path is tuned for
- * speed: the amount field is focused on open, and category/account are single
- * taps on chips rather than dropdowns, so a typical entry is amount → tap →
- * tap → save.
+ * One sheet serves both "add" and "edit".
+ *
+ * The whole question this form asks is: did money come IN or go OUT, and which
+ * pocket did it touch — the bank or cash. So those are the only two things on
+ * screen above the amount, in those words. "Expense"/"income"/"transfer" never
+ * appear; moving money between your own accounts is tucked away behind a link
+ * and is not offered at all until there are two accounts to move between.
  */
-export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: Props) {
+export function TransactionSheet({
+  open,
+  onOpenChange,
+  transaction,
+  onSaved,
+}: Props) {
   const { accounts, categories, refresh } = useAppData();
   const toast = useToast();
   const editing = !!transaction;
@@ -53,7 +62,13 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
   const [showMore, setShowMore] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
-  const active = React.useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
+  const active = React.useMemo(
+    () => accounts.filter((a) => !a.archived),
+    [accounts],
+  );
+  // With a single account there is nothing to move money between, so the whole
+  // idea of a transfer stays hidden.
+  const canTransfer = active.length > 1;
 
   // Reset (or hydrate) the form each time the sheet opens.
   React.useEffect(() => {
@@ -76,7 +91,9 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
       // Default to the last account used, so repeat entries need no tap at all.
       const remembered = Number(localStorage.getItem("lastAccountId"));
       setAccountId(
-        active.some((a) => a.id === remembered) ? remembered : (active[0]?.id ?? null),
+        active.some((a) => a.id === remembered)
+          ? remembered
+          : (active[0]?.id ?? null),
       );
       setToAccountId(null);
     }
@@ -89,11 +106,14 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
       return;
     }
     if (!accountId) {
-      toast("Pick an account", "error");
+      toast(
+        isTransfer ? "Pick where the money came from" : "Pick bank or cash",
+        "error",
+      );
       return;
     }
-    if (type === "transfer" && !toAccountId) {
-      toast("Pick the account to transfer to", "error");
+    if (isTransfer && !toAccountId) {
+      toast("Pick where the money went", "error");
       return;
     }
 
@@ -112,7 +132,13 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
       else await api.post("/transactions", payload);
 
       localStorage.setItem("lastAccountId", String(accountId));
-      toast(editing ? "Transaction updated" : "Transaction saved");
+      toast(
+        editing
+          ? "Saved"
+          : type === "income"
+            ? "Money in saved"
+            : "Money out saved",
+      );
       await refresh();
       onSaved?.();
       onOpenChange(false);
@@ -125,11 +151,11 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
 
   async function remove() {
     if (!transaction) return;
-    if (!confirm("Delete this transaction?")) return;
+    if (!confirm("Delete this entry?")) return;
     setSaving(true);
     try {
       await api.del(`/transactions/${transaction.id}`);
-      toast("Transaction deleted");
+      toast("Deleted");
       await refresh();
       onSaved?.();
       onOpenChange(false);
@@ -141,44 +167,73 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
   }
 
   const isTransfer = type === "transfer";
+  const isIn = type === "income";
+  const lockedTransfer = editing && !!transaction?.transfer_group_id;
+  const minor = toMinor(amount);
+  const validAmount = Number.isFinite(minor) && minor !== 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit transaction" : "Quick add"}</DialogTitle>
+          <DialogTitle>
+            {editing
+              ? "Edit this entry"
+              : isTransfer
+                ? "Move money"
+                : "Add money in or out"}
+          </DialogTitle>
           <DialogDescription className="sr-only">
-            Enter an amount, pick a category and account, then save.
+            Choose whether money came in or went out, enter the amount, and pick
+            bank or cash.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Type toggle — hidden when editing a transfer, whose legs are fixed. */}
-          {!(editing && transaction?.transfer_group_id) && (
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
-              {TYPES.map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  disabled={editing && t.value === "transfer"}
-                  onClick={() => setType(t.value)}
-                  className={cn(
-                    "rounded-md py-2 text-sm font-medium transition-colors disabled:opacity-40",
-                    type === t.value
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+        <div className="space-y-5">
+          {!isTransfer && (
+            <div className="grid grid-cols-2 gap-2">
+              <DirectionCard
+                selected={!isIn}
+                onClick={() => setType("expense")}
+                tone="out"
+                icon={ArrowUpRight}
+                title="Money out"
+                subtitle="I spent or paid"
+              />
+              <DirectionCard
+                selected={isIn}
+                onClick={() => setType("income")}
+                tone="in"
+                icon={ArrowDownLeft}
+                title="Money in"
+                subtitle="I received it"
+              />
+            </div>
+          )}
+
+          {isTransfer && (
+            <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
+              <ArrowLeftRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span>
+                Moving your own money between accounts — nothing is spent or
+                earned.
+              </span>
             </div>
           )}
 
           <div>
-            <Label htmlFor="amount">Amount</Label>
-            <div className="relative mt-1">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-muted-foreground">
+            <Label htmlFor="amount">How much?</Label>
+            <div className="relative mt-1.5">
+              <span
+                className={cn(
+                  "pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-medium",
+                  isTransfer
+                    ? "text-muted-foreground"
+                    : isIn
+                      ? "text-money-in"
+                      : "text-money-out",
+                )}
+              >
                 ₹
               </span>
               <Input
@@ -189,53 +244,89 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && save()}
-                className="h-16 pl-9 text-3xl font-semibold tabular"
+                className={cn(
+                  "tabular h-16 rounded-xl pl-10 text-3xl font-semibold",
+                  !isTransfer && (isIn ? "text-money-in" : "text-money-out"),
+                )}
               />
             </div>
           </div>
 
           <div>
-            <Label>{isTransfer ? "From account" : "Account"}</Label>
-            <ChipRow
-              items={active.map((a) => ({ id: a.id, label: a.name, hint: a.type }))}
+            <Label>
+              {isTransfer
+                ? "Take it from"
+                : isIn
+                  ? "Where did it go?"
+                  : "Where did it come from?"}
+            </Label>
+            <AccountRow
+              accounts={active}
               selected={accountId}
               onSelect={setAccountId}
+              tone={isTransfer ? "neutral" : isIn ? "in" : "out"}
             />
           </div>
 
           {isTransfer && (
             <div>
-              <Label>To account</Label>
-              <ChipRow
-                items={active
-                  .filter((a) => a.id !== accountId)
-                  .map((a) => ({ id: a.id, label: a.name, hint: a.type }))}
+              <Label>Put it into</Label>
+              <AccountRow
+                accounts={active.filter((a) => a.id !== accountId)}
                 selected={toAccountId}
                 onSelect={setToAccountId}
+                tone="neutral"
               />
             </div>
           )}
 
-          <div>
-            <Label>Category</Label>
-            <ChipRow
-              items={categories.map((c) => ({ id: c.id, label: c.name }))}
-              selected={categoryId}
-              onSelect={(id) => setCategoryId(id === categoryId ? null : id)}
-              wrap
-            />
-          </div>
+          {/* A category makes no sense on money you simply moved to another pocket. */}
+          {!isTransfer && (
+            <div>
+              <Label>
+                What was it for?{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {categories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No categories yet.
+                  </p>
+                ) : (
+                  categories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() =>
+                        setCategoryId(c.id === categoryId ? null : c.id)
+                      }
+                      className={cn(
+                        "rounded-full border px-3 py-2 text-sm transition-colors",
+                        categoryId === c.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-card hover:bg-accent",
+                      )}
+                    >
+                      {c.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
 
           {showMore ? (
             <div className="space-y-3">
               <div>
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="date">When?</Label>
                 <Input
                   id="date"
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="mt-1"
+                  className="mt-1.5"
                 />
               </div>
               <div>
@@ -244,8 +335,8 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
                   id="note"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Optional"
-                  className="mt-1"
+                  placeholder="e.g. groceries at the market"
+                  className="mt-1.5"
                 />
               </div>
             </div>
@@ -253,68 +344,260 @@ export function TransactionSheet({ open, onOpenChange, transaction, onSaved }: P
             <button
               type="button"
               onClick={() => setShowMore(true)}
-              className="text-sm text-primary underline-offset-4 hover:underline"
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
-              Add date or note
+              Change the date or add a note
             </button>
           )}
 
-          <div className="flex gap-2 pt-1">
+          {/* A plain-English read-back, so there is no doubt about what saving does. */}
+          <Summary
+            type={type}
+            amount={validAmount ? Math.abs(minor) : null}
+            from={active.find((a) => a.id === accountId) ?? null}
+            to={active.find((a) => a.id === toAccountId) ?? null}
+          />
+
+          <div className="flex gap-2">
             {editing && (
-              <Button variant="outline" size="lg" onClick={remove} disabled={saving}>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={remove}
+                disabled={saving}
+              >
                 <Trash2 />
                 <span className="sr-only">Delete</span>
               </Button>
             )}
-            <Button size="lg" className="flex-1" onClick={save} disabled={saving}>
+            <Button
+              size="lg"
+              className={cn(
+                "flex-1",
+                !isTransfer &&
+                  (isIn
+                    ? "bg-money-in text-money-in-ink hover:bg-money-in/90"
+                    : "bg-money-out text-money-out-ink hover:bg-money-out/90"),
+              )}
+              onClick={save}
+              disabled={saving}
+            >
               {saving ? "Saving…" : editing ? "Save changes" : "Save"}
             </Button>
           </div>
+
+          {/* Transfers are an edge case for one-account users, so they live here
+              rather than as a third choice competing with in/out. */}
+          {!editing && canTransfer && (
+            <button
+              type="button"
+              onClick={() => {
+                setType(isTransfer ? "expense" : "transfer");
+                setToAccountId(null);
+              }}
+              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              {isTransfer
+                ? "Back to money in / money out"
+                : "Just moving money between my own accounts?"}
+            </button>
+          )}
+          {lockedTransfer && (
+            <p className="text-center text-xs text-muted-foreground">
+              This is one half of a move between your accounts. Editing it
+              updates both halves.
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function ChipRow({
-  items,
+function DirectionCard({
   selected,
-  onSelect,
-  wrap,
+  onClick,
+  tone,
+  icon: Icon,
+  title,
+  subtitle,
 }: {
-  items: { id: number; label: string; hint?: string }[];
-  selected: number | null;
-  onSelect: (id: number) => void;
-  wrap?: boolean;
+  selected: boolean;
+  onClick: () => void;
+  tone: "in" | "out";
+  icon: typeof ArrowUpRight;
+  title: string;
+  subtitle: string;
 }) {
-  if (items.length === 0) {
-    return <p className="mt-1 text-sm text-muted-foreground">None yet — add one first.</p>;
-  }
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
       className={cn(
-        "mt-1 gap-1.5",
-        wrap ? "flex flex-wrap" : "flex overflow-x-auto pb-1 [scrollbar-width:none]",
+        "flex flex-col items-start gap-1 rounded-xl border-2 p-3 text-left transition-colors",
+        selected
+          ? tone === "in"
+            ? "border-money-in bg-money-in-soft"
+            : "border-money-out bg-money-out-soft"
+          : "border-border bg-card hover:bg-accent/60",
       )}
     >
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onSelect(item.id)}
-          className={cn(
-            "shrink-0 rounded-full border px-3 py-2 text-sm transition-colors",
-            selected === item.id
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-input bg-background hover:bg-accent",
-          )}
-        >
-          {item.label}
-          {item.hint && (
-            <span className="ml-1 text-xs opacity-60">{item.hint === "cash" ? "cash" : "bank"}</span>
-          )}
-        </button>
-      ))}
+      <span
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-full",
+          selected
+            ? tone === "in"
+              ? "bg-money-in text-money-in-ink"
+              : "bg-money-out text-money-out-ink"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span
+        className={cn(
+          "font-semibold",
+          selected && (tone === "in" ? "text-money-in" : "text-money-out"),
+        )}
+      >
+        {title}
+      </span>
+      <span className="text-xs text-muted-foreground">{subtitle}</span>
+    </button>
+  );
+}
+
+function AccountRow({
+  accounts,
+  selected,
+  onSelect,
+  tone,
+}: {
+  accounts: Account[];
+  selected: number | null;
+  onSelect: (id: number) => void;
+  tone: "in" | "out" | "neutral";
+}) {
+  if (accounts.length === 0) {
+    return (
+      <p className="mt-1.5 text-sm text-muted-foreground">
+        No account yet — add one under Accounts first.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+      {accounts.map((a) => {
+        const isSelected = selected === a.id;
+        const Icon = a.type === "cash" ? Banknote : Landmark;
+        return (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => onSelect(a.id)}
+            aria-pressed={isSelected}
+            className={cn(
+              "flex items-center gap-2.5 rounded-xl border-2 px-3 py-2.5 text-left transition-colors",
+              isSelected
+                ? tone === "in"
+                  ? "border-money-in bg-money-in-soft"
+                  : tone === "out"
+                    ? "border-money-out bg-money-out-soft"
+                    : "border-primary bg-accent"
+                : "border-border bg-card hover:bg-accent/60",
+            )}
+          >
+            <Icon
+              className={cn(
+                "h-4 w-4 shrink-0",
+                isSelected
+                  ? tone === "in"
+                    ? "text-money-in"
+                    : tone === "out"
+                      ? "text-money-out"
+                      : "text-primary"
+                  : "text-muted-foreground",
+              )}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">
+                {a.name}
+              </span>
+              <span className="tabular block text-xs text-muted-foreground">
+                {describe(a)}
+              </span>
+            </span>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+/** "ICICI Bank · Bank · ₹100" reads badly, so the kind is dropped when the name
+    already says it. */
+function describe(a: Account): string {
+  const kind = a.type === "cash" ? "Cash" : "Bank";
+  const named = a.name.toLowerCase().includes(kind.toLowerCase());
+  const balance = formatMoney(a.balance);
+  return named ? balance : `${kind} · ${balance}`;
+}
+
+function Summary({
+  type,
+  amount,
+  from,
+  to,
+}: {
+  type: TxType;
+  amount: number | null;
+  from: Account | null;
+  to: Account | null;
+}) {
+  if (amount === null || !from) return null;
+  const money = formatMoney(amount);
+  const where = (a: Account) =>
+    a.type === "cash" ? `cash (${a.name})` : a.name;
+
+  let text: React.ReactNode;
+  if (type === "transfer") {
+    text = to ? (
+      <>
+        Moving <strong>{money}</strong> from {where(from)} to {where(to)}.
+      </>
+    ) : (
+      <>
+        Moving <strong>{money}</strong> out of {where(from)} — pick where it
+        goes.
+      </>
+    );
+  } else if (type === "income") {
+    text = (
+      <>
+        <strong>{money}</strong> came in and went into {where(from)}.
+      </>
+    );
+  } else {
+    text = (
+      <>
+        <strong>{money}</strong> went out of {where(from)}.
+      </>
+    );
+  }
+
+  return (
+    <p
+      className={cn(
+        "rounded-xl px-3 py-2 text-sm",
+        type === "income"
+          ? "bg-money-in-soft text-money-in"
+          : type === "expense"
+            ? "bg-money-out-soft text-money-out"
+            : "bg-muted text-muted-foreground",
+      )}
+    >
+      {text}
+    </p>
   );
 }

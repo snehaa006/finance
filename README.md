@@ -99,24 +99,29 @@ Then open http://localhost:8787.
 
 ## Features
 
-**Transactions** — income, expense and transfer, each with account, category,
-date and optional note. Filter by date range, account, category, type, or a text
-search across notes/categories/accounts.
+**Entries** — money in, money out, and (only when you keep more than one
+account) moving money between your own accounts. Each has an account, category,
+date and optional note. Filter by date range, account, category, direction, or a
+text search across notes/categories/accounts.
 
-**Quick add** — the floating `+` on mobile (or the sidebar button on desktop)
-opens a sheet with the amount field already focused, the last-used account
-preselected, and category/account as one-tap chips. Date defaults to today and
-the note is hidden behind "Add date or note", so the common case is: type
-amount, tap category, save.
+**Add money in or out** — the floating `+` on mobile (or the sidebar button on
+desktop) opens a sheet that asks two questions in plain words: did money come in
+or go out, and which pocket did it touch — bank or cash. The amount field is
+focused on open, the last-used account is preselected, and a read-back line
+("₹450 went out of ICICI Bank") spells out what saving will do. Date defaults to
+today and the note is tucked behind a link, so the common case is: type amount,
+tap category, save. Transfers stay behind a link and disappear entirely when
+there is only one account.
 
-**Dashboard** — net worth as a step chart (a balance holds flat until the next
-transaction, so no interpolated curve invents movement), monthly income vs
-expense, spending by category ranked as a bar chart, top categories this month,
-and the cash-vs-bank split.
+**Home** — total money as a step chart (a balance holds flat until the next
+transaction, so no interpolated curve invents movement), money in vs money out per month, where the money went
+ranked as a bar chart, the biggest spends this month, and the cash-vs-bank
+split. Money in is teal and money out is orange everywhere in the app.
 
-**Accounts** — create bank or cash accounts with a starting balance; each shows
-a running balance. Archiving hides an account from quick add and the dashboard
-without deleting its history.
+**Bank & cash** — create bank or cash accounts with a starting balance (ICICI
+names are offered as one-tap suggestions); each shows a running balance. Hiding
+an account keeps its history but drops it from the add screen and the home
+page.
 
 **Categories** — eleven built-ins that can't be deleted, plus your own in
 Settings.
@@ -126,8 +131,10 @@ Settings.
 Upload a CSV export for an account, and the app matches its rows against what
 you logged.
 
-**Column detection** — the header row is sniffed rather than fixed, so most bank
-exports work as-is. It finds a date column (`Date`, `Txn Date`, `Value Date`…), a
+**Column detection** — the header row is located by scanning the first rows for
+one that has both a date and an amount, so exports that put an account summary
+above the table (ICICI internet banking does) work as downloaded. Columns are
+then sniffed rather than fixed, so most bank exports work as-is. It finds a date column (`Date`, `Txn Date`, `Value Date`…), a
 description column (`Narration`, `Particulars`, `Description`, `Memo`…), and
 either a single signed `Amount` column or separate debit/credit columns
 (`Withdrawal Amt`/`Deposit Amt`, `Debit`/`Credit`, `Paid Out`/`Paid In`).

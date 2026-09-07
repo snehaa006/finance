@@ -1,16 +1,16 @@
 import * as React from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { ArrowLeftRight, LayoutDashboard, LogOut, Plus, Receipt, Settings, Wallet } from "lucide-react";
+import { FileCheck, LayoutDashboard, LogOut, Plus, Receipt, Settings, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TransactionSheet } from "@/components/TransactionSheet";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/transactions", label: "Transactions", icon: Receipt, end: false },
+  { to: "/", label: "Home", icon: LayoutDashboard, end: true },
+  { to: "/transactions", label: "History", icon: Receipt, end: false },
   { to: "/accounts", label: "Accounts", icon: Wallet, end: false },
-  { to: "/reconcile", label: "Reconcile", icon: ArrowLeftRight, end: false },
+  { to: "/reconcile", label: "Statement", icon: FileCheck, end: false },
   { to: "/settings", label: "Settings", icon: Settings, end: false },
 ];
 
@@ -22,9 +22,11 @@ export function Layout() {
     <div className="min-h-dvh md:flex">
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-card p-4 md:flex">
-        <div className="mb-6 flex items-center gap-2 px-2">
-          <Wallet className="h-5 w-5 text-primary" />
-          <span className="font-semibold">Finance</span>
+        <div className="mb-6 flex items-center gap-2.5 px-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Wallet className="h-4 w-4" />
+          </span>
+          <span className="text-lg font-semibold tracking-tight text-brand">My Money</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map(({ to, label, icon: Icon, end }) => (
@@ -46,8 +48,8 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <Button className="mb-2" onClick={() => setQuickAdd(true)}>
-          <Plus /> Quick add
+        <Button size="lg" className="mb-2" onClick={() => setQuickAdd(true)}>
+          <Plus /> Add money in or out
         </Button>
         <Button variant="ghost" className="justify-start text-muted-foreground" onClick={logout}>
           <LogOut /> Log out
@@ -58,8 +60,10 @@ export function Layout() {
         {/* Mobile header */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-background/90 px-4 py-3 backdrop-blur md:hidden">
           <div className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-primary" />
-            <span className="font-semibold">Finance</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Wallet className="h-4 w-4" />
+            </span>
+            <span className="font-semibold tracking-tight text-brand">My Money</span>
           </div>
           <Button variant="ghost" size="icon" onClick={logout} aria-label="Log out">
             <LogOut />
@@ -76,7 +80,7 @@ export function Layout() {
       <Button
         size="icon"
         onClick={() => setQuickAdd(true)}
-        aria-label="Quick add transaction"
+        aria-label="Add money in or out"
         className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full shadow-lg md:hidden"
       >
         <Plus className="!size-6" />

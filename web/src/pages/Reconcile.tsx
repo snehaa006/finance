@@ -62,18 +62,18 @@ export function Reconcile() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reconcile</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Check your statement</h1>
         <p className="text-sm text-muted-foreground">
-          Upload a bank statement and check it against what you logged.
+          Upload the statement you downloaded from your bank and see what you forgot to log.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">New import</CardTitle>
+          <CardTitle className="text-base">Upload a statement</CardTitle>
           <CardDescription>
-            CSV only for now. Most bank exports work — the columns are detected
-            automatically.
+            CSV only for now. An ICICI internet-banking export works as downloaded — the
+            columns are detected automatically, extra header lines and all.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

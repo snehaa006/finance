@@ -3,67 +3,91 @@
 @tailwind utilities;
 
 @layer base {
+  /* Palette is built around the ICICI brand pair — orange #F37021 and maroon
+     #AE275F — darkened where text sits on top so contrast stays AA. */
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    --background: 30 33% 97%;
+    --foreground: 25 30% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 25 30% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 94%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 94%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 94%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 152 60% 36%;
-    --success-foreground: 210 40% 98%;
-    --border: 214 32% 88%;
-    --input: 214 32% 88%;
-    --ring: 221 83% 53%;
-    --radius: 0.75rem;
+    --popover-foreground: 25 30% 12%;
+    --primary: 21 90% 42%;
+    --primary-foreground: 30 40% 99%;
+    --brand: 335 62% 36%;
+    --brand-foreground: 30 40% 99%;
+    --secondary: 28 35% 93%;
+    --secondary-foreground: 25 30% 15%;
+    --muted: 28 30% 94%;
+    --muted-foreground: 25 12% 40%;
+    --accent: 28 45% 92%;
+    --accent-foreground: 25 30% 15%;
+    --destructive: 4 74% 44%;
+    --destructive-foreground: 30 40% 99%;
+    --success: 194 100% 27%;
+    --success-foreground: 30 40% 99%;
 
-    /* Chart tokens. Validated with the dataviz palette validator against the
-       light card surface (#fff): CVD ΔE 24.7, normal-vision ΔE 33.6, both
-       series ≥3:1 contrast. Dark steps are re-picked for the dark surface
-       rather than being an automatic flip. */
-    --chart-1: #2a78d6;
-    --chart-2: #eb6834;
-    --chart-grid: #e2e8f0;
-    --chart-axis: #64748b;
+    /* Money direction. Every "in" surface in the app uses the same teal and
+       every "out" surface the same orange, so direction is legible before a
+       single word is read. */
+    --money-in: 194 100% 27%;
+    --money-in-soft: 194 60% 94%;
+    --money-in-ink: 0 0% 100%;
+    --money-out: 21 90% 42%;
+    --money-out-soft: 26 85% 94%;
+    --money-out-ink: 0 0% 100%;
+
+    --border: 28 25% 87%;
+    --input: 28 25% 85%;
+    --ring: 21 90% 42%;
+    --radius: 1rem;
+
+    /* Chart tokens. Validated with the dataviz palette validator: light steps
+       against the card surface (CVD ΔE 19.4, normal-vision ΔE 31.2, both ≥3:1),
+       dark steps re-picked against the dark card rather than flipped. */
+    --chart-1: #00779c;
+    --chart-2: #e8701a;
+    --chart-grid: #e8e0d8;
+    --chart-axis: #7c6f66;
   }
 
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 96%;
-    --card: 222 40% 12%;
-    --card-foreground: 210 40% 96%;
-    --popover: 222 40% 12%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 18%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 20%;
-    --accent-foreground: 210 40% 96%;
-    --destructive: 0 63% 45%;
-    --destructive-foreground: 210 40% 96%;
-    --success: 152 55% 45%;
-    --success-foreground: 222 47% 11%;
-    --border: 217 33% 22%;
-    --input: 217 33% 22%;
-    --ring: 217 91% 60%;
+    --background: 25 25% 7%;
+    --foreground: 30 25% 95%;
+    --card: 25 22% 11%;
+    --card-foreground: 30 25% 95%;
+    --popover: 25 22% 11%;
+    --popover-foreground: 30 25% 95%;
+    --primary: 22 88% 55%;
+    --primary-foreground: 25 40% 10%;
+    --brand: 335 60% 62%;
+    --brand-foreground: 25 40% 10%;
+    --secondary: 25 15% 18%;
+    --secondary-foreground: 30 25% 95%;
+    --muted: 25 15% 18%;
+    --muted-foreground: 30 12% 66%;
+    --accent: 25 18% 21%;
+    --accent-foreground: 30 25% 95%;
+    --destructive: 4 64% 48%;
+    --destructive-foreground: 30 25% 96%;
+    --success: 194 68% 46%;
+    --success-foreground: 25 40% 10%;
 
-    --chart-1: #3987e5;
-    --chart-2: #d95926;
-    --chart-grid: #1e293b;
-    --chart-axis: #94a3b8;
+    --money-in: 194 68% 50%;
+    --money-in-soft: 194 45% 18%;
+    --money-in-ink: 25 40% 10%;
+    --money-out: 22 85% 58%;
+    --money-out-soft: 22 45% 18%;
+    --money-out-ink: 25 40% 10%;
+
+    --border: 25 14% 22%;
+    --input: 25 14% 24%;
+    --ring: 22 88% 55%;
+
+    --chart-1: #1f9bc2;
+    --chart-2: #d9762c;
+    --chart-grid: #2a2320;
+    --chart-axis: #a3948a;
   }
 
   * {

@@ -1,8 +1,8 @@
 -- Optional sample data for local development: `npm run db:seed:local`.
 -- Amounts are in paise. Safe to run on an empty database only.
 INSERT INTO accounts (name, type, starting_balance) VALUES
-  ('HDFC Savings', 'bank', 5000000),
-  ('Wallet', 'cash', 300000);
+  ('ICICI Bank', 'bank', 5000000),
+  ('Cash in hand', 'cash', 300000);
 
 INSERT INTO transactions (account_id, category_id, amount, type, date, note) VALUES
   (1, (SELECT id FROM categories WHERE name = 'Salary/Income'),  9000000, 'income',  date('now', 'start of month'),            'Monthly salary'),
