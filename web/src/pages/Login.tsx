@@ -29,8 +29,10 @@ export function Login() {
     <div className="flex min-h-dvh items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <Wallet className="mb-2 h-8 w-8 text-primary" />
-          <CardTitle>Finance Tracker</CardTitle>
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+            <Wallet className="h-6 w-6" />
+          </span>
+          <CardTitle className="text-brand">My Money</CardTitle>
           <CardDescription>Enter your password to continue.</CardDescription>
         </CardHeader>
         <CardContent>

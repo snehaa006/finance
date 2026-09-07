@@ -19,6 +19,17 @@ export default {
         popover: { DEFAULT: "hsl(var(--popover))", foreground: "hsl(var(--popover-foreground))" },
         card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
         success: { DEFAULT: "hsl(var(--success))", foreground: "hsl(var(--success-foreground))" },
+        brand: { DEFAULT: "hsl(var(--brand))", foreground: "hsl(var(--brand-foreground))" },
+        "money-in": {
+          DEFAULT: "hsl(var(--money-in))",
+          soft: "hsl(var(--money-in-soft))",
+          ink: "hsl(var(--money-in-ink))",
+        },
+        "money-out": {
+          DEFAULT: "hsl(var(--money-out))",
+          soft: "hsl(var(--money-out-soft))",
+          ink: "hsl(var(--money-out-ink))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

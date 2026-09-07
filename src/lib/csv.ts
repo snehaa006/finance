@@ -118,16 +118,43 @@ export function parseDate(raw: string): string | null {
   return null;
 }
 
+const DATE_COLS = ["date", "transaction date", "txn date", "value date", "posted"];
+const DESC_COLS = ["description", "narration", "particulars", "details", "remarks", "memo", "payee"];
+const AMOUNT_COLS = ["amount", "value", "transaction amount"];
+const DEBIT_COLS = ["debit", "withdrawal", "withdrawal amt", "paid out", "dr"];
+const CREDIT_COLS = ["credit", "deposit", "deposit amt", "paid in", "cr"];
+
+/**
+ * Find the header row. ICICI's internet-banking export (and several others)
+ * puts account number, name and a blank line above the real header, so the
+ * first row of the file is often not it. Scan a short way in for the first row
+ * that has both a date column and something amount-shaped.
+ */
+function findHeaderRow(table: string[][]): number {
+  const limit = Math.min(table.length, 25);
+  for (let i = 0; i < limit; i++) {
+    const row = table[i];
+    if (findCol(row, DATE_COLS) === -1) continue;
+    const hasAmount =
+      findCol(row, AMOUNT_COLS) !== -1 ||
+      findCol(row, DEBIT_COLS) !== -1 ||
+      findCol(row, CREDIT_COLS) !== -1;
+    if (hasAmount) return i;
+  }
+  return 0;
+}
+
 export function parseStatementCsv(text: string): ParsedRow[] {
   const table = parseCsv(text.replace(/^﻿/, ""));
   if (table.length < 2) bad("Statement needs a header row and at least one transaction");
 
-  const header = table[0];
-  const dateCol = findCol(header, ["date", "transaction date", "txn date", "value date", "posted"]);
-  const descCol = findCol(header, ["description", "narration", "particulars", "details", "remarks", "memo", "payee"]);
-  const amountCol = findCol(header, ["amount", "value", "transaction amount"]);
-  const debitCol = findCol(header, ["debit", "withdrawal", "withdrawal amt", "paid out", "dr"]);
-  const creditCol = findCol(header, ["credit", "deposit", "deposit amt", "paid in", "cr"]);
+  const headerRow = findHeaderRow(table);
+  const header = table[headerRow];
+  const dateCol = findCol(header, DATE_COLS);
+  const descCol = findCol(header, DESC_COLS);
+  const amountCol = findCol(header, AMOUNT_COLS);
+  const debitCol = findCol(header, DEBIT_COLS);
+  const creditCol = findCol(header, CREDIT_COLS);
 
   if (dateCol === -1) bad("Could not find a date column in the statement");
   if (amountCol === -1 && debitCol === -1 && creditCol === -1) {
@@ -135,7 +162,7 @@ export function parseStatementCsv(text: string): ParsedRow[] {
   }
 
   const out: ParsedRow[] = [];
-  for (const row of table.slice(1)) {
+  for (const row of table.slice(headerRow + 1)) {
     const date = parseDate(row[dateCol] ?? "");
     if (!date) continue; // skip subtotal/footer junk rather than failing the import
 

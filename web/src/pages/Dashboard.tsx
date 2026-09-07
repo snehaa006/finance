@@ -11,7 +11,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Banknote, Landmark, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Banknote,
+  Landmark,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -25,6 +32,7 @@ import { ChartEmpty, ChartLegend, ChartTooltip } from "@/components/charts";
 import { api, qs } from "@/lib/api";
 import { useAppData } from "@/lib/store";
 import { formatDateShort, formatMoney, formatMonth, monthsAgo, startOfMonth, today } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { DashboardData } from "@/lib/types";
 
 const RANGES = [
@@ -35,6 +43,8 @@ const RANGES = [
 ];
 
 const SERIES = { income: "var(--chart-1)", expense: "var(--chart-2)" };
+const IN_LABEL = "Money in";
+const OUT_LABEL = "Money out";
 
 export function Dashboard() {
   const { revision } = useAppData();
@@ -59,8 +69,8 @@ export function Dashboard() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Where your money stands today.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Your money</h1>
+          <p className="text-sm text-muted-foreground">Where things stand today.</p>
         </div>
         <Select value={range} onValueChange={setRange}>
           <SelectTrigger className="w-full sm:w-44">
@@ -79,27 +89,42 @@ export function Dashboard() {
       {/* Hero number first: net worth is the one figure worth reading at a glance. */}
       <Card>
         <CardHeader className="pb-2">
-          <CardDescription>Net worth</CardDescription>
+          <CardDescription>Total money you have</CardDescription>
           <CardTitle className="tabular text-3xl sm:text-4xl">
             {formatMoney(data.net_worth)}
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 pt-2">
-          <Split icon={Landmark} label="Bank" value={data.bank_total} />
-          <Split icon={Banknote} label="Cash" value={data.cash_total} />
+          <Split icon={Landmark} label="In the bank" value={data.bank_total} />
+          <Split icon={Banknote} label="Cash in hand" value={data.cash_total} />
         </CardContent>
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Income this month" value={data.this_month.income} icon={TrendingUp} />
-        <Stat label="Spent this month" value={data.this_month.expense} icon={TrendingDown} />
-        <Stat label="Net this month" value={net} icon={net >= 0 ? TrendingUp : TrendingDown} signed />
+        <Stat
+          label="Money in this month"
+          value={data.this_month.income}
+          icon={ArrowDownLeft}
+          tone="in"
+        />
+        <Stat
+          label="Money out this month"
+          value={data.this_month.expense}
+          icon={ArrowUpRight}
+          tone="out"
+        />
+        <Stat
+          label="Left over this month"
+          value={net}
+          icon={net >= 0 ? TrendingUp : TrendingDown}
+          signed
+        />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Net worth over time</CardTitle>
-          <CardDescription>Total across every account, including cash.</CardDescription>
+          <CardTitle className="text-base">Your money over time</CardTitle>
+          <CardDescription>Bank and cash added together.</CardDescription>
         </CardHeader>
         <CardContent className="h-64 pl-0">
           {data.net_worth_series.length < 2 ? (
@@ -136,7 +161,7 @@ export function Dashboard() {
                       <ChartTooltip
                         label={String(label)}
                         rows={[
-                          { name: "Net worth", value: Number(payload[0].value), color: "var(--chart-1)" },
+                          { name: "Total money", value: Number(payload[0].value), color: "var(--chart-1)" },
                         ]}
                       />
                     ) : null
@@ -163,13 +188,15 @@ export function Dashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Income vs expense</CardTitle>
-            <CardDescription>Month by month, transfers excluded.</CardDescription>
+            <CardTitle className="text-base">Money in vs money out</CardTitle>
+            <CardDescription>
+              Month by month. Money you shift between your own accounts isn't counted.
+            </CardDescription>
             <div className="pt-1">
               <ChartLegend
                 items={[
-                  { name: "Income", color: SERIES.income },
-                  { name: "Expense", color: SERIES.expense },
+                  { name: IN_LABEL, color: SERIES.income },
+                  { name: OUT_LABEL, color: SERIES.expense },
                 ]}
               />
             </div>
@@ -202,7 +229,7 @@ export function Dashboard() {
                         <ChartTooltip
                           label={formatMonth(String(label))}
                           rows={payload.map((p) => ({
-                            name: p.dataKey === "income" ? "Income" : "Expense",
+                            name: p.dataKey === "income" ? IN_LABEL : OUT_LABEL,
                             value: Number(p.value),
                             color: p.dataKey === "income" ? SERIES.income : SERIES.expense,
                           }))}
@@ -235,8 +262,8 @@ export function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Spending by category</CardTitle>
-            <CardDescription>Ranked over the selected range.</CardDescription>
+            <CardTitle className="text-base">Where the money went</CardTitle>
+            <CardDescription>Biggest spends first, over the range above.</CardDescription>
           </CardHeader>
           <CardContent className="h-64 pl-0">
             {data.spending_by_category.length === 0 ? (
@@ -277,7 +304,7 @@ export function Dashboard() {
                             {
                               name: `${payload[0].payload.count} transaction${payload[0].payload.count === 1 ? "" : "s"}`,
                               value: Number(payload[0].value),
-                              color: "var(--chart-1)",
+                              color: "var(--chart-2)",
                             },
                           ]}
                         />
@@ -286,7 +313,7 @@ export function Dashboard() {
                   />
                   <Bar dataKey="total" radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
                     {data.spending_by_category.slice(0, 8).map((d) => (
-                      <Cell key={d.category} fill="var(--chart-1)" />
+                      <Cell key={d.category} fill="var(--chart-2)" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -299,7 +326,7 @@ export function Dashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top categories this month</CardTitle>
+            <CardTitle className="text-base">Biggest spends this month</CardTitle>
           </CardHeader>
           <CardContent>
             {data.top_categories_this_month.length === 0 ? (
@@ -320,7 +347,7 @@ export function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Account balances</CardTitle>
+            <CardTitle className="text-base">What's in each place</CardTitle>
           </CardHeader>
           <CardContent>
             {data.accounts.length === 0 ? (
@@ -372,17 +399,28 @@ function Stat({
   value,
   icon: Icon,
   signed,
+  tone,
 }: {
   label: string;
   value: number;
   icon: React.ComponentType<{ className?: string }>;
   signed?: boolean;
+  tone?: "in" | "out";
 }) {
   return (
     <Card>
       <CardContent className="flex items-center gap-3 p-4">
-        <div className="rounded-lg bg-muted p-2">
-          <Icon className="h-4 w-4 text-muted-foreground" />
+        <div
+          className={cn(
+            "rounded-lg p-2",
+            tone === "in"
+              ? "bg-money-in-soft text-money-in"
+              : tone === "out"
+                ? "bg-money-out-soft text-money-out"
+                : "bg-muted text-muted-foreground",
+          )}
+        >
+          <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
           <div className="truncate text-xs text-muted-foreground">{label}</div>

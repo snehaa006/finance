@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowLeftRight, Filter, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Filter, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +25,9 @@ const PAGE_SIZE = 50;
 
 export function Transactions() {
   const { accounts, categories, revision } = useAppData();
+  // "Moved between accounts" is meaningless with a single account, so it is not
+  // offered as a filter until there are two.
+  const canTransfer = accounts.filter((a) => !a.archived).length > 1;
   const [filters, setFilters] = React.useState({
     start: "",
     end: "",
@@ -74,9 +77,9 @@ export function Transactions() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">History</h1>
           <p className="text-sm text-muted-foreground">
-            {page ? `${page.total} matching` : "Loading…"}
+            {page ? `${page.total} entries` : "Loading…"}
           </p>
         </div>
         <Button
@@ -154,16 +157,18 @@ export function Transactions() {
               </Select>
             </div>
             <div>
-              <Label>Type</Label>
+              <Label>In or out</Label>
               <Select value={filters.type} onValueChange={(v) => set("type", v)}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL}>All types</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="transfer">Transfer</SelectItem>
+                  <SelectItem value={ALL}>Everything</SelectItem>
+                  <SelectItem value="expense">Money out</SelectItem>
+                  <SelectItem value="income">Money in</SelectItem>
+                  {canTransfer && (
+                    <SelectItem value="transfer">Moved between accounts</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -179,15 +184,29 @@ export function Transactions() {
       {page && page.total > 0 && (
         <div className="grid grid-cols-2 gap-3">
           <Card>
-            <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Money in</div>
-              <div className="tabular font-semibold">{formatMoney(page.inflow)}</div>
+            <CardContent className="flex items-center gap-2.5 p-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-money-in-soft text-money-in">
+                <ArrowDownLeft className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">Money in</div>
+                <div className="tabular font-semibold text-money-in">
+                  {formatMoney(page.inflow)}
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Money out</div>
-              <div className="tabular font-semibold">{formatMoney(page.outflow)}</div>
+            <CardContent className="flex items-center gap-2.5 p-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-money-out-soft text-money-out">
+                <ArrowUpRight className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">Money out</div>
+                <div className="tabular font-semibold text-money-out">
+                  {formatMoney(page.outflow)}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -202,7 +221,7 @@ export function Transactions() {
       ) : page.transactions.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            No transactions match these filters.
+            Nothing matches these filters.
           </CardContent>
         </Card>
       ) : (
@@ -213,14 +232,36 @@ export function Transactions() {
               onClick={() => setEditing(t)}
               className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent/50 sm:p-4"
             >
+              {/* A coloured arrow says in-or-out before any number is read. */}
+              <span
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                  t.transfer_group_id
+                    ? "bg-muted text-muted-foreground"
+                    : t.amount > 0
+                      ? "bg-money-in-soft text-money-in"
+                      : "bg-money-out-soft text-money-out",
+                )}
+              >
+                {t.transfer_group_id ? (
+                  <ArrowLeftRight className="h-4 w-4" />
+                ) : t.amount > 0 ? (
+                  <ArrowDownLeft className="h-4 w-4" />
+                ) : (
+                  <ArrowUpRight className="h-4 w-4" />
+                )}
+              </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">
-                    {t.note || t.category_name || (t.transfer_group_id ? "Transfer" : "Transaction")}
+                    {t.note ||
+                      t.category_name ||
+                      (t.transfer_group_id
+                        ? "Moved between accounts"
+                        : t.amount > 0
+                          ? "Money in"
+                          : "Money out")}
                   </span>
-                  {t.transfer_group_id && (
-                    <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  )}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <span>{formatDate(t.date)}</span>
@@ -241,7 +282,11 @@ export function Transactions() {
               <div
                 className={cn(
                   "tabular shrink-0 font-semibold",
-                  t.amount > 0 ? "text-success" : "text-foreground",
+                  t.transfer_group_id
+                    ? "text-muted-foreground"
+                    : t.amount > 0
+                      ? "text-money-in"
+                      : "text-money-out",
                 )}
               >
                 {formatMoney(t.amount, { signed: true })}

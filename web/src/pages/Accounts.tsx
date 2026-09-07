@@ -18,6 +18,18 @@ import { formatMoney, toMajorString, toMinor } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account, AccountType } from "@/lib/types";
 
+/** Bank first: ICICI is the common case here, cash is the second pocket. */
+const ACCOUNT_KINDS: { value: AccountType; label: string; icon: typeof Landmark }[] = [
+  { value: "bank", label: "Bank account", icon: Landmark },
+  { value: "cash", label: "Cash in hand", icon: Banknote },
+];
+
+/** One tap for the two accounts almost every entry here will use. */
+const NAME_SUGGESTIONS: { name: string; type: AccountType }[] = [
+  { name: "ICICI Bank", type: "bank" },
+  { name: "Cash in hand", type: "cash" },
+];
+
 export function Accounts() {
   const { accounts, refresh, loading } = useAppData();
   const [editing, setEditing] = React.useState<Account | null>(null);
@@ -25,17 +37,18 @@ export function Accounts() {
 
   const netWorth = accounts.filter((a) => !a.archived).reduce((s, a) => s + a.balance, 0);
   const groups: { type: AccountType; label: string }[] = [
-    { type: "bank", label: "Bank accounts" },
-    { type: "cash", label: "Cash" },
+    { type: "bank", label: "Bank" },
+    { type: "cash", label: "Cash in hand" },
   ];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Accounts</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Bank &amp; cash</h1>
           <p className="text-sm text-muted-foreground">
-            Net worth {formatMoney(netWorth)}
+            <span className="tabular font-medium text-foreground">{formatMoney(netWorth)}</span> in
+            total
           </p>
         </div>
         <Button onClick={() => setCreating(true)}>
@@ -48,7 +61,7 @@ export function Accounts() {
       ) : accounts.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            No accounts yet. Create one to start logging transactions.
+            Nothing here yet. Add your ICICI account and your cash to get started.
           </CardContent>
         </Card>
       ) : (
@@ -84,8 +97,8 @@ export function Accounts() {
                             {!!a.archived && <Badge variant="secondary">archived</Badge>}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {a.transaction_count} transaction{a.transaction_count === 1 ? "" : "s"}
-                            {" · opened with "}
+                            {a.transaction_count} entr{a.transaction_count === 1 ? "y" : "ies"}
+                            {" · started at "}
                             {formatMoney(a.starting_balance)}
                           </div>
                         </div>
@@ -178,7 +191,7 @@ function AccountDialog({
     if (!account) return;
     if (
       !confirm(
-        `Delete "${account.name}"? Its ${account.transaction_count} transaction(s) will be deleted too.`,
+        `Delete "${account.name}"? Its ${account.transaction_count} entr${account.transaction_count === 1 ? "y" : "ies"} will be deleted too.`,
       )
     )
       return;
@@ -199,7 +212,7 @@ function AccountDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{account ? "Edit account" : "New account"}</DialogTitle>
+          <DialogTitle>{account ? "Edit account" : "Add bank or cash"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -208,30 +221,56 @@ function AccountDialog({
               id="acc-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="HDFC Savings"
+              placeholder="ICICI Bank"
               className="mt-1"
             />
+            {!account && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {NAME_SUGGESTIONS.map((sug) => (
+                  <button
+                    key={sug.name}
+                    type="button"
+                    onClick={() => {
+                      setName(sug.name);
+                      setType(sug.type);
+                    }}
+                    className="rounded-full border border-input bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                  >
+                    {sug.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
-            <Label>Type</Label>
-            <div className="mt-1 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-              {(["bank", "cash"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setType(t)}
-                  className={cn(
-                    "rounded-md py-2 text-sm font-medium capitalize transition-colors",
-                    type === t ? "bg-background shadow-sm" : "text-muted-foreground",
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
+            <Label>What is it?</Label>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {ACCOUNT_KINDS.map((k) => {
+                const Icon = k.icon;
+                return (
+                  <button
+                    key={k.value}
+                    type="button"
+                    onClick={() => setType(k.value)}
+                    aria-pressed={type === k.value}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                      type === k.value
+                        ? "border-primary bg-accent text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent/60",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {k.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div>
-            <Label htmlFor="acc-start">Starting balance</Label>
+            <Label htmlFor="acc-start">
+              {account ? "Opening balance" : "How much is in it right now?"}
+            </Label>
             <Input
               id="acc-start"
               inputMode="decimal"
@@ -240,7 +279,8 @@ function AccountDialog({
               className="mt-1 tabular"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              The balance before any transaction below was logged.
+              This is the balance before anything you log here. Everything you add afterwards
+              moves up or down from this number.
             </p>
           </div>
           {account && (
@@ -251,7 +291,7 @@ function AccountDialog({
                 onChange={(e) => setArchived(e.target.checked)}
                 className="h-4 w-4 rounded border-input"
               />
-              Archive (hide from quick add and dashboard)
+              Hide this account (keeps its history, drops it from the add screen)
             </label>
           )}
           <div className="flex gap-2">
