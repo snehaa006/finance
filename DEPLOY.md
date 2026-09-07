@@ -23,43 +23,46 @@ export CLOUDFLARE_ACCOUNT_ID=...
 
 Confirm with `npx wrangler whoami`.
 
-## 2. Create the D1 database
+## 2. The D1 database
 
-```bash
-npx wrangler d1 create finance-db
-```
-
-It prints a block like:
+`finance-db` already exists in this Cloudflare account, and `wrangler.toml`
+already points at it:
 
 ```
 [[d1_databases]]
 binding = "DB"
 database_name = "finance-db"
-database_id = "b1e4c0a2-1234-5678-9abc-def012345678"
+database_id = "ef656585-91ec-41b7-a4a8-775313c4b6ba"
 ```
-
-Copy the `database_id` into `wrangler.toml`, replacing
-`REPLACE_WITH_YOUR_D1_DATABASE_ID`. Leave `binding = "DB"` alone — the code
-looks that name up.
 
 This is safe to commit: a D1 database id is an identifier, not a credential.
 Access is controlled by your Cloudflare account, not by knowing the id.
 
-## 3. Run migrations against the real database
+If you ever need to recreate it from scratch (new account, fresh environment),
+run `npx wrangler d1 create finance-db` and paste the new `database_id` over the
+one above. Leave `binding = "DB"` alone — the code looks that name up.
+
+## 3. Migrations
+
+`0001_init.sql` has already been applied to the remote `finance-db`, and the
+`d1_migrations` bookkeeping table records it, so re-running the command below is
+a no-op rather than an error. Run it after adding any *new* migration file:
 
 ```bash
 npx wrangler d1 migrations apply finance-db --remote
 ```
 
 `--remote` is the important flag — without it you migrate the local emulated
-copy again. Verify:
+copy instead. Verify the live schema at any time with:
 
 ```bash
 npx wrangler d1 execute finance-db --remote \
-  --command "SELECT name FROM categories ORDER BY id"
+  --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 ```
 
-You should see the eleven built-in categories.
+The five application tables are `accounts`, `categories`, `transactions`,
+`statement_imports` and `statement_rows`. The 11 default categories are seeded
+by the initial migration.
 
 ## 4. Set the secrets
 

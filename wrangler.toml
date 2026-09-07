@@ -11,7 +11,7 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "finance-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "ef656585-91ec-41b7-a4a8-775313c4b6ba"
 migrations_dir = "migrations"
 
 [vars]
