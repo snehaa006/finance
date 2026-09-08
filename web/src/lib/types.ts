@@ -56,6 +56,7 @@ export interface DashboardData {
   monthly: { month: string; income: number; expense: number }[];
   top_categories_this_month: { category: string; total: number }[];
   this_month: { income: number; expense: number };
+  prev_month: { income: number; expense: number };
 }
 
 export interface StatementImport {

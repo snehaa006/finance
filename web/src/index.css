@@ -51,6 +51,10 @@
     --chart-2: #be123c;
     --chart-grid: #e3e7ee;
     --chart-axis: #6b7280;
+    /* A deliberate neutral, not a third series hue: it marks derived figures
+       (what's left over, a zero rule) so they read as commentary on the two
+       real series rather than competing with them. */
+    --chart-ink: #475569;
   }
 
   .dark {
@@ -90,6 +94,7 @@
     --chart-2: #dc3f63;
     --chart-grid: #232838;
     --chart-axis: #94a0b8;
+    --chart-ink: #aab6cc;
   }
 
   * {

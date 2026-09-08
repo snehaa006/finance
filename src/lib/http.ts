@@ -33,7 +33,9 @@ export function reqStr(v: unknown, field: string, max = 500): string {
 export function optStr(v: unknown, max = 2000): string | null {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v !== "string") return null;
-  return v.trim().slice(0, max);
+  const s = v.trim().slice(0, max);
+  // A note of nothing but whitespace is no note at all.
+  return s === "" ? null : s;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

@@ -23,6 +23,16 @@ import type { Transaction, TransactionPage } from "@/lib/types";
 const ALL = "all";
 const PAGE_SIZE = 50;
 
+/** A note's first line is its headline; the rest is the context behind it. */
+function noteTitle(note: string | null): string {
+  return (note ?? "").split("\n")[0].trim();
+}
+
+function noteRest(note: string | null): string {
+  const rest = (note ?? "").split("\n").slice(1).join("\n").trim();
+  return rest;
+}
+
 export function Transactions() {
   const { accounts, categories, revision } = useAppData();
   // "Moved between accounts" is meaningless with a single account, so it is not
@@ -100,7 +110,7 @@ export function Transactions() {
                 id="search"
                 value={filters.search}
                 onChange={(e) => set("search", e.target.value)}
-                placeholder="Note, category or account"
+                placeholder="Anything in a note, category or account"
                 className="mt-1"
               />
             </div>
@@ -254,7 +264,7 @@ export function Transactions() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">
-                    {t.note ||
+                    {noteTitle(t.note) ||
                       t.category_name ||
                       (t.transfer_group_id
                         ? "Moved between accounts"
@@ -263,6 +273,14 @@ export function Transactions() {
                           : "Money out")}
                   </span>
                 </div>
+                {/* Anything the note says beyond its first line is context, so
+                    it gets its own quiet line instead of being swallowed by the
+                    title's truncation. */}
+                {noteRest(t.note) && (
+                  <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs text-muted-foreground">
+                    {noteRest(t.note)}
+                  </p>
+                )}
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <span>{formatDate(t.date)}</span>
                   <span aria-hidden>·</span>
