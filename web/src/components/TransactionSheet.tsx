@@ -25,6 +25,9 @@ import { formatMoney, toMajorString, toMinor, today } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account, Transaction, TxType } from "@/lib/types";
 
+/** Long enough for real context, short enough to stay a note and not an essay. */
+const NOTE_MAX = 500;
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -126,7 +129,7 @@ export function TransactionSheet({
         amount: Math.abs(minor),
         type,
         date,
-        note: note || null,
+        note: note.trim() || null,
       };
       if (editing) await api.put(`/transactions/${transaction!.id}`, payload);
       else await api.post("/transactions", payload);
@@ -317,28 +320,54 @@ export function TransactionSheet({
             </div>
           )}
 
+          {/* The note is where the story of an entry lives, so it sits on the
+              form in full view rather than behind a "more" link. The first line
+              becomes the entry's title in History; anything after it is kept as
+              context you can read later. */}
+          <div>
+            <Label htmlFor="note">
+              Note{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id="note"
+              value={note}
+              onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))}
+              placeholder={
+                isTransfer
+                  ? "e.g. topped up cash for the week"
+                  : isIn
+                    ? "e.g. September salary\nBonus for the Diwali release is in this one"
+                    : "e.g. groceries at the market\nMonthly stock-up, Ravi owes me half"
+              }
+              rows={3}
+              className="mt-1.5 resize-y"
+            />
+            <div className="mt-1 flex items-start justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Write anything you will want to remember — what it was for, who
+                it was with, why. It is searchable from History.
+              </p>
+              {note.length > NOTE_MAX - 120 && (
+                <span className="tabular shrink-0 text-xs text-muted-foreground">
+                  {NOTE_MAX - note.length}
+                </span>
+              )}
+            </div>
+          </div>
+
           {showMore ? (
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="date">When?</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="mt-1.5"
-                />
-              </div>
-              <div>
-                <Label htmlFor="note">Note</Label>
-                <Textarea
-                  id="note"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="e.g. groceries at the market"
-                  className="mt-1.5"
-                />
-              </div>
+            <div>
+              <Label htmlFor="date">When?</Label>
+              <Input
+                id="date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="mt-1.5"
+              />
             </div>
           ) : (
             <button
@@ -346,7 +375,7 @@ export function TransactionSheet({
               onClick={() => setShowMore(true)}
               className="text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
-              Change the date or add a note
+              Change the date
             </button>
           )}
 

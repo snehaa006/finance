@@ -5,7 +5,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  ComposedChart,
+  LabelList,
+  Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,6 +19,7 @@ import {
   ArrowUpRight,
   Banknote,
   Landmark,
+  Minus,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -31,7 +35,15 @@ import {
 import { ChartEmpty, ChartLegend, ChartTooltip } from "@/components/charts";
 import { api, qs } from "@/lib/api";
 import { useAppData } from "@/lib/store";
-import { formatDateShort, formatMoney, formatMonth, monthsAgo, startOfMonth, today } from "@/lib/format";
+import {
+  formatDate,
+  formatDateShort,
+  formatMoney,
+  formatMonth,
+  monthsAgo,
+  startOfMonth,
+  today,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DashboardData } from "@/lib/types";
 
@@ -42,36 +54,100 @@ const RANGES = [
   { value: "month", label: "This month" },
 ];
 
-const SERIES = { income: "var(--chart-1)", expense: "var(--chart-2)" };
+/** The two hues carry identity (in vs out). Ink is not a third series — it is
+ *  the derived "left over" figure and the zero rule, and it is always paired
+ *  with a mark shape of its own (a line, not a bar) plus a legend label. */
+const SERIES = {
+  income: "var(--chart-1)",
+  expense: "var(--chart-2)",
+  net: "var(--chart-ink)",
+};
 const IN_LABEL = "Money in";
 const OUT_LABEL = "Money out";
+const NET_LABEL = "Left over";
+
+/** Ranked spending is folded past this point so nothing is silently dropped. */
+const TOP_CATEGORIES = 7;
 
 export function Dashboard() {
   const { revision } = useAppData();
   const [range, setRange] = React.useState("6");
   const [data, setData] = React.useState<DashboardData | null>(null);
+  const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     const start = range === "month" ? startOfMonth() : monthsAgo(Number(range) - 1);
+    let live = true;
+    setLoading(true);
     api
       .get<DashboardData>(`/dashboard${qs({ start, end: today() })}`)
-      .then(setData)
-      .catch((e) => setError(e.message));
+      .then((d) => {
+        if (!live) return;
+        setData(d);
+        setError("");
+      })
+      .catch((e) => live && setError(e.message))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
   }, [range, revision]);
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!data) return <DashboardSkeleton />;
 
   const net = data.this_month.income - data.this_month.expense;
+  const prevNet = data.prev_month.income - data.prev_month.expense;
+  const rangeLabel = RANGES.find((r) => r.value === range)?.label.toLowerCase() ?? "";
+
+  // Headline for the trend card: where the balance ended up versus where the
+  // window opened. Reading it off the chart's own endpoints keeps the sentence
+  // and the line telling the same story.
+  const series = data.net_worth_series;
+  const openingValue = series[0]?.value ?? 0;
+  const change = data.net_worth - openingValue;
+  const hasTrend =
+    series.length > 2 || series.some((p) => p.value !== openingValue);
+  const dipsBelowZero = series.some((p) => p.value < 0);
+
+  // Every bar keeps its own place in the ranking; the long tail becomes one
+  // honest "Everything else" bar rather than being cut off the chart.
+  const spending = data.spending_by_category;
+  const spendingTotal = spending.reduce((s, d) => s + d.total, 0);
+  const ranked = spending.slice(0, TOP_CATEGORIES);
+  const tail = spending.slice(TOP_CATEGORIES);
+  const spendingRows = tail.length
+    ? [
+        ...ranked,
+        {
+          category: "Everything else",
+          category_id: null,
+          total: tail.reduce((s, d) => s + d.total, 0),
+          count: tail.reduce((s, d) => s + d.count, 0),
+        },
+      ]
+    : ranked;
+
+  const monthly = data.monthly.map((m) => ({ ...m, net: m.income - m.expense }));
+  const monthlyHasNegative = monthly.some((m) => m.net < 0);
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    // A refetch holds the previous render at reduced opacity rather than
+    // collapsing back to skeletons, so switching range never jumps the layout.
+    <div
+      className={cn(
+        "space-y-4 transition-opacity md:space-y-6",
+        loading && "opacity-60",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Your money</h1>
           <p className="text-sm text-muted-foreground">Where things stand today.</p>
         </div>
+        {/* One range control above everything it scopes — the charts below all
+            read the same slice. */}
         <Select value={range} onValueChange={setRange}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue />
@@ -90,7 +166,7 @@ export function Dashboard() {
       <Card>
         <CardHeader className="pb-2">
           <CardDescription>Total money you have</CardDescription>
-          <CardTitle className="tabular text-3xl sm:text-4xl">
+          <CardTitle className="text-3xl sm:text-4xl">
             {formatMoney(data.net_worth)}
           </CardTitle>
         </CardHeader>
@@ -104,34 +180,70 @@ export function Dashboard() {
         <Stat
           label="Money in this month"
           value={data.this_month.income}
+          previous={data.prev_month.income}
           icon={ArrowDownLeft}
           tone="in"
+          betterWhen="up"
         />
         <Stat
           label="Money out this month"
           value={data.this_month.expense}
+          previous={data.prev_month.expense}
           icon={ArrowUpRight}
           tone="out"
+          betterWhen="down"
         />
         <Stat
           label="Left over this month"
           value={net}
+          previous={prevNet}
           icon={net >= 0 ? TrendingUp : TrendingDown}
           signed
+          betterWhen="up"
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Your money over time</CardTitle>
-          <CardDescription>Bank and cash added together.</CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+            <div>
+              <CardTitle className="text-base">Your money over time</CardTitle>
+              <CardDescription>Bank and cash added together.</CardDescription>
+            </div>
+            {/* The one number the line is there to show, said in words as well,
+                so the story does not depend on reading the slope. */}
+            {hasTrend && (
+              <div className="text-right">
+                <div
+                  className={cn(
+                    "tabular flex items-center justify-end gap-1 text-sm font-semibold",
+                    change > 0
+                      ? "text-money-in"
+                      : change < 0
+                        ? "text-money-out"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {change > 0 ? (
+                    <TrendingUp className="h-4 w-4" />
+                  ) : change < 0 ? (
+                    <TrendingDown className="h-4 w-4" />
+                  ) : (
+                    <Minus className="h-4 w-4" />
+                  )}
+                  {change === 0 ? "No change" : formatMoney(change, { signed: true })}
+                </div>
+                <div className="text-xs text-muted-foreground">{rangeLabel}</div>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="h-64 pl-0">
-          {data.net_worth_series.length < 2 ? (
+          {!hasTrend ? (
             <ChartEmpty>Log a few transactions to see the trend.</ChartEmpty>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.net_worth_series} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+              <AreaChart data={series} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="netWorthFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.28} />
@@ -159,7 +271,7 @@ export function Dashboard() {
                   content={({ active, payload, label }) =>
                     active && payload?.length ? (
                       <ChartTooltip
-                        label={String(label)}
+                        label={formatDate(String(label))}
                         rows={[
                           { name: "Total money", value: Number(payload[0].value), color: "var(--chart-1)" },
                         ]}
@@ -167,6 +279,12 @@ export function Dashboard() {
                     ) : null
                   }
                 />
+                {/* Only drawn when the balance actually goes negative — an
+                    always-on zero rule on a chart that never approaches it is
+                    just another gridline. */}
+                {dipsBelowZero && (
+                  <ReferenceLine y={0} stroke="var(--chart-ink)" strokeWidth={1} />
+                )}
                 {/* stepAfter, not a smooth curve: a balance holds flat until the
                     next transaction, and an interpolated curve would imply
                     movement on days nothing happened. */}
@@ -190,23 +308,28 @@ export function Dashboard() {
           <CardHeader>
             <CardTitle className="text-base">Money in vs money out</CardTitle>
             <CardDescription>
-              Month by month. Money you shift between your own accounts isn't counted.
+              Month by month, with what you kept. Money you shift between your own
+              accounts isn't counted.
             </CardDescription>
             <div className="pt-1">
               <ChartLegend
                 items={[
                   { name: IN_LABEL, color: SERIES.income },
                   { name: OUT_LABEL, color: SERIES.expense },
+                  { name: NET_LABEL, color: SERIES.net },
                 ]}
               />
             </div>
           </CardHeader>
           <CardContent className="h-64 pl-0">
-            {data.monthly.length === 0 ? (
+            {monthly.length === 0 ? (
               <ChartEmpty>Nothing in this range yet.</ChartEmpty>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.monthly} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+                {/* The bars answer "how much moved"; the line answers "did I
+                    keep any of it" — the question the two bars only imply. Same
+                    unit, same axis, so no second scale is invented. */}
+                <ComposedChart data={monthly} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
                   <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                   <XAxis
                     dataKey="month"
@@ -214,6 +337,7 @@ export function Dashboard() {
                     tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
                     tickLine={false}
                     axisLine={false}
+                    minTickGap={8}
                   />
                   <YAxis
                     width={64}
@@ -228,15 +352,32 @@ export function Dashboard() {
                       active && payload?.length ? (
                         <ChartTooltip
                           label={formatMonth(String(label))}
-                          rows={payload.map((p) => ({
-                            name: p.dataKey === "income" ? IN_LABEL : OUT_LABEL,
-                            value: Number(p.value),
-                            color: p.dataKey === "income" ? SERIES.income : SERIES.expense,
-                          }))}
+                          rows={[
+                            {
+                              name: IN_LABEL,
+                              value: Number(payload[0].payload.income),
+                              color: SERIES.income,
+                            },
+                            {
+                              name: OUT_LABEL,
+                              value: Number(payload[0].payload.expense),
+                              color: SERIES.expense,
+                            },
+                            {
+                              name: NET_LABEL,
+                              value: Number(payload[0].payload.net),
+                              color: SERIES.net,
+                            },
+                          ]}
                         />
                       ) : null
                     }
                   />
+                  {/* A month that spends more than it earns crosses this line,
+                      which is the whole point of drawing the net at all. */}
+                  {monthlyHasNegative && (
+                    <ReferenceLine y={0} stroke="var(--chart-ink)" strokeWidth={1} />
+                  )}
                   {/* Animation is off across the dashboard: Recharts replays it on
                       every ResponsiveContainer resize, which reads as flicker when a
                       phone rotates or the keyboard opens. */}
@@ -254,7 +395,16 @@ export function Dashboard() {
                     maxBarSize={22}
                     isAnimationActive={false}
                   />
-                </BarChart>
+                  <Line
+                    type="linear"
+                    dataKey="net"
+                    stroke={SERIES.net}
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                    dot={{ r: 3, fill: SERIES.net, stroke: "var(--card)", strokeWidth: 2 }}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--card)" }}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -263,61 +413,82 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Where the money went</CardTitle>
-            <CardDescription>Biggest spends first, over the range above.</CardDescription>
+            <CardDescription>
+              {spendingTotal > 0
+                ? `${formatMoney(spendingTotal)} spent, biggest first.`
+                : "Biggest spends first, over the range above."}
+            </CardDescription>
           </CardHeader>
-          <CardContent className="h-64 pl-0">
-            {data.spending_by_category.length === 0 ? (
+          <CardContent className="pl-0">
+            {spendingRows.length === 0 ? (
               <ChartEmpty>No spending recorded in this range.</ChartEmpty>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                {/* A ranked bar chart rather than a pie: length compares far more
-                    accurately than angle, and one hue sidesteps needing a
-                    distinct colour per category. */}
-                <BarChart
-                  layout="vertical"
-                  data={data.spending_by_category.slice(0, 8)}
-                  margin={{ top: 4, right: 16, bottom: 0, left: 0 }}
-                >
-                  <CartesianGrid stroke="var(--chart-grid)" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tickFormatter={(v) => formatMoney(v, { compact: true })}
-                    tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="category"
-                    width={92}
-                    tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--chart-grid)", fillOpacity: 0.35 }}
-                    content={({ active, payload }) =>
-                      active && payload?.length ? (
-                        <ChartTooltip
-                          label={String(payload[0].payload.category)}
-                          rows={[
-                            {
-                              name: `${payload[0].payload.count} transaction${payload[0].payload.count === 1 ? "" : "s"}`,
-                              value: Number(payload[0].value),
-                              color: "var(--chart-2)",
-                            },
-                          ]}
-                        />
-                      ) : null
-                    }
-                  />
-                  <Bar dataKey="total" radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
-                    {data.spending_by_category.slice(0, 8).map((d) => (
-                      <Cell key={d.category} fill="var(--chart-2)" />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              // Height follows the number of bars instead of a fixed box, so a
+              // short list is not stranded in whitespace and a long one is not
+              // squeezed into a nested scroll.
+              <div style={{ height: Math.max(160, spendingRows.length * 34 + 32) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  {/* A ranked bar chart rather than a pie: length compares far more
+                      accurately than angle, and one hue sidesteps needing a
+                      distinct colour per category. */}
+                  <BarChart
+                    layout="vertical"
+                    data={spendingRows}
+                    margin={{ top: 0, right: 68, bottom: 0, left: 0 }}
+                  >
+                    {/* No gridlines: the x-axis is hidden and every bar carries
+                        its own value, so a grid would measure nothing. */}
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="category"
+                      width={96}
+                      tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "var(--chart-grid)", fillOpacity: 0.35 }}
+                      content={({ active, payload }) =>
+                        active && payload?.length ? (
+                          <ChartTooltip
+                            label={
+                              payload[0].payload.category === "Everything else"
+                                ? `Everything else (${tail.length} categories)`
+                                : String(payload[0].payload.category)
+                            }
+                            rows={[
+                              {
+                                name: `${payload[0].payload.count} entr${payload[0].payload.count === 1 ? "y" : "ies"} · ${share(Number(payload[0].value), spendingTotal)}`,
+                                value: Number(payload[0].value),
+                                color: "var(--chart-2)",
+                              },
+                            ]}
+                          />
+                        ) : null
+                      }
+                    />
+                    <Bar
+                      dataKey="total"
+                      fill="var(--chart-2)"
+                      radius={[0, 4, 4, 0]}
+                      maxBarSize={18}
+                      isAnimationActive={false}
+                    >
+                      {/* The x-axis is hidden because each bar carries its own
+                          amount — the value is readable without a hover. */}
+                      <LabelList
+                        dataKey="total"
+                        position="right"
+                        offset={8}
+                        fontSize={11}
+                        fill="var(--chart-axis)"
+                        formatter={(v: number) => formatMoney(v, { compact: true })}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -374,6 +545,11 @@ export function Dashboard() {
   );
 }
 
+function share(value: number, total: number): string {
+  if (total <= 0) return "—";
+  return `${Math.round((value / total) * 100)}% of spending`;
+}
+
 function Split({
   icon: Icon,
   label,
@@ -397,16 +573,27 @@ function Split({
 function Stat({
   label,
   value,
+  previous,
   icon: Icon,
   signed,
   tone,
+  betterWhen,
 }: {
   label: string;
   value: number;
+  previous: number;
   icon: React.ComponentType<{ className?: string }>;
   signed?: boolean;
   tone?: "in" | "out";
+  /** Which direction of change counts as good news for this figure. */
+  betterWhen: "up" | "down";
 }) {
+  const diff = value - previous;
+  // A percentage off a zero baseline is meaningless, so the first month with a
+  // figure says "new" rather than "+∞%".
+  const pct = previous !== 0 ? Math.round((diff / Math.abs(previous)) * 100) : null;
+  const good = betterWhen === "up" ? diff > 0 : diff < 0;
+
   return (
     <Card>
       <CardContent className="flex items-center gap-3 p-4">
@@ -424,8 +611,32 @@ function Stat({
         </div>
         <div className="min-w-0">
           <div className="truncate text-xs text-muted-foreground">{label}</div>
-          <div className="tabular text-lg font-semibold">
+          <div className="text-lg font-semibold">
             {signed ? formatMoney(value, { signed: true }) : formatMoney(value)}
+          </div>
+          {/* Context, not decoration: a figure for "this month" means little
+              without the month before it to sit against. */}
+          <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+            {diff === 0 ? (
+              <>
+                <Minus className="h-3 w-3" />
+                <span>Same as last month</span>
+              </>
+            ) : (
+              <>
+                {diff > 0 ? (
+                  <ArrowUpRight className={cn("h-3 w-3", good ? "text-money-in" : "text-money-out")} />
+                ) : (
+                  <ArrowDownLeft className={cn("h-3 w-3", good ? "text-money-in" : "text-money-out")} />
+                )}
+                <span className="tabular truncate">
+                  {pct === null
+                    ? formatMoney(diff, { signed: true, compact: true })
+                    : `${diff > 0 ? "+" : "−"}${Math.abs(pct)}%`}{" "}
+                  vs last month
+                </span>
+              </>
+            )}
           </div>
         </div>
       </CardContent>
@@ -439,9 +650,9 @@ function DashboardSkeleton() {
       <Skeleton className="h-9 w-40" />
       <Skeleton className="h-36 w-full" />
       <div className="grid gap-4 sm:grid-cols-3">
-        <Skeleton className="h-20" />
-        <Skeleton className="h-20" />
-        <Skeleton className="h-20" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
       </div>
       <Skeleton className="h-72 w-full" />
     </div>

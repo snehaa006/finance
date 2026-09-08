@@ -112,14 +112,22 @@ app.get("/", async (c) => {
   const sumWhere = (t: string) =>
     accountRows.filter((a) => a.type === t).reduce((s, a) => s + a.balance, 0);
 
-  const thisMonth = await db
-    .prepare(
-      `SELECT COALESCE(SUM(CASE WHEN type = 'income'  THEN amount END), 0)  AS income,
-              COALESCE(SUM(CASE WHEN type = 'expense' THEN -amount END), 0) AS expense
-         FROM transactions
-        WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now')`,
-    )
-    .first<{ income: number; expense: number }>();
+  // This month and the one before it, so the headline figures can carry a
+  // "compared with last month" delta instead of standing on their own.
+  // Archived accounts are excluded here exactly as they are everywhere else.
+  const monthTotals = (offset: 0 | 1) =>
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(CASE WHEN t.type = 'income'  THEN t.amount END), 0)  AS income,
+                COALESCE(SUM(CASE WHEN t.type = 'expense' THEN -t.amount END), 0) AS expense
+           FROM transactions t JOIN accounts a ON a.id = t.account_id
+          WHERE a.archived = 0
+            AND strftime('%Y-%m', t.date) = strftime('%Y-%m', 'now', 'start of month', ?)`,
+      )
+      .bind(offset === 0 ? "+0 months" : "-1 months")
+      .first<{ income: number; expense: number }>();
+
+  const [thisMonth, prevMonth] = await Promise.all([monthTotals(0), monthTotals(1)]);
 
   return c.json({
     range: { start, end },
@@ -132,6 +140,7 @@ app.get("/", async (c) => {
     monthly: byMonth.results,
     top_categories_this_month: topThisMonth.results,
     this_month: thisMonth,
+    prev_month: prevMonth,
   });
 });
 
